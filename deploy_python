@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+
+python3_path=""
+SYS_TYPE=""
+
+uname | grep -qwi "linux"
+if [[ $? == 0 ]];then
+	RESULTS=$(uname -a | grep -qwi "ubuntu")
+	if [[ $RESULTS == 0 ]];then
+		SYS_TYPE="ubuntu"
+	else
+		SYS_TYPE="centos"
+	fi
+elif [[ "$(uname)" == "Darwin" ]];then
+	echo "macosx"
+	SYS_TYPE="macosx"
+else
+	echo "unknown system type"
+	exit 1
+fi
+
+echo "system type $SYS_TYPE"
+
+python_name=plugins_py3
+dist_path=$HOME/.proj-plugins/plugins
+virtual_python3=$dist_path/$python_name
+
+function install_sys_dependence () {
+	if [[ "$SYS_TYPE" == "centos" ]];then
+		sudo yum -y update
+		sudo yum -y groupinstall "Development tools"
+		sudo yum -y install yum-utils
+		sudo yum -y install zlib-devel bzip2-devel openssl-devel ncurses-devel sqlite-devel readline-devel tk-devel gdbm-devel db4-devel libpcap-devel xz-devel
+		sudo yum -y install https://centos7.iuscommunity.org/ius-release.rpm
+	elif [[ "$SYS_TYPE" == "ubuntu" ]];then
+		echo "install dependencies"
+	fi
+}
+ 
+function install_python3 () {
+	echo "will be install python3"
+	if [[ "$SYS_TYPE" == "centos" ]];then
+		sudo yum -y install python36u
+		python3 -V
+		sudo yum -y install python3u-pip
+		sudo yum -y install python3u-devel
+	elif [[ "$SYS_TYPE" == "ubuntu" ]];then
+		echo "install python3 on ubuntu"
+	elif [[ "$SYS_TYPE" == "macosx" ]];then
+		curl https://www.python.org/ftp/python/3.9.1/python-3.9.1-macosx11.0.pkg -o python-3.9.1-macos11.0.pkg
+		sudo installer -pkg python-3.9.1-macos11.0.pkg  -target /
+		# brew install python3
+	fi
+}
+
+function install_git () {
+	GIT_PATH=`which git`
+	if [[ "$(which git)" == "" ]];then
+		echo "install git"
+	else
+		echo "git installed already"
+		return
+	fi
+
+	if [[ "$SYS_TYPE" == "centos" ]];then
+		yum -y install git
+	elif [[ "$SYS_TYPE" == "ubuntu" ]];then
+		apt-get update
+		apt-get install git
+	elif [[ "$SYS_TYPE" == "macosx" ]];then
+		brew install git
+	fi
+}
+
+function find_python3 () {
+	python3_dir=""
+	python_cmd=`which python3`
+	# 两种方法可以设置字符串切割方式， 空格或换行
+	#SAVEIFS=$IFS
+	#IFS=$(echo -en "\n")
+	OLD_IFS="$IFS"
+	IFS=" "
+	array=($python_cmd)
+	for var in ${array[@]}
+	do	
+		if [[ $var == *python3* ]] && [[ $var == *bin* ]]
+		then
+			python3_dir=$var
+			if [[ $python3_dir != "" ]];then
+				break
+			fi
+		fi
+	done
+	echo "$python3_dir"
+}
+
+function find_pip3 () {
+	pip3_dir=""
+	pip_cmd=`which pip3`
+	pip3_array=($pip_cmd)
+	for var in ${pip3_array[@]}
+	do
+		if [[ $var == *pip3* ]] && [[ $var == *bin* ]]
+		then
+			pip3_dir=$var
+			break
+		fi
+	done
+	echo "$pip3_dir"
+}
+
+python3_path=$( find_python3 )
+if [ "$python3_path" == "" ]
+then
+	echo "need install python3"
+	install_sys_dependence
+	install_python3
+	if [ $? == 0 ]
+	then
+		echo "install python3 success"
+	else
+		echo "install pyton3 fail"
+		exit -1
+	fi
+	python3_path=$( find_python3 )
+fi
+
+
+pip3_path=$( find_pip3 )
+if [ "$pip3_path" == "" ]
+then
+	echo "need install pip3"
+	curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+	python3 get-pip.py
+	if [ $? == 0 ]
+	then
+		echo "install pip3 success"
+	else
+		echo "install pip3 fail"
+		exit -1
+	fi
+	pip3_path=$( find_pip3 )
+fi
+
+echo "******************"
+echo $python3_path
+echo $pip3_path
+echo "******************"
+
+
+function install_virtualenv () {
+	pip_path=$1
+	$pip_path install virtualenv
+}
+
+function check_python3_env () {
+	py3_path=$1
+	curr_dir=$PWD
+	if [ ! -d "$dist_path" ]
+	then
+		mkdir $dist_path -p
+	else
+		echo "$dist_path exist"
+	fi
+	
+	if [ ! -d "$virtual_python3" ]
+	then
+		cd $dist_path
+		virtualenv -p $py3_path $python_name
+		echo "create plugins_py3 success"
+		cd $curr_dir
+	else
+		echo "plugins_py3 already exist"
+	fi
+}
+
+install_virtualenv $pip3_path
+check_python3_env $python3_path
+exit
